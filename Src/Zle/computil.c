@@ -911,7 +911,7 @@ struct cadef {
     Caarg rest;			/* the rest-argument */
     char **defs;		/* the original strings */
     int ndefs;			/* number of ... */
-    int lastt;			/* last time this was used */
+    time_t lastt;		/* last time this was used */
     Caopt *single;		/* array of single-letter options */
     char *match;		/* -M spec to use */
     int argsactive;		/* if normal arguments are still allowed */
@@ -2935,7 +2935,7 @@ struct cvdef {
     Cvval vals;			/* value definitions */
     char **defs;		/* original strings */
     int ndefs;			/* number of ... */
-    int lastt;			/* last time used */
+    time_t lastt;		/* last time used */
     int words;                  /* if to look at other words */
 };
 
@@ -4383,7 +4383,7 @@ cfp_matcher_range(Cmatcher *ms, char *add)
 			 * word pattern.
 			 */
 			if ((ind = pattern_match_equivalence
-			     (m->word, ind, mt, addc)) != CHR_INVALID) {
+			     (m->word, ind+1, mt, addc)) != CHR_INVALID) {
 			    if (ret) {
 				if (imeta(ind)) {
 				    *p++ = Meta;

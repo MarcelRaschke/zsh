@@ -52,6 +52,20 @@ cindex(assignment)
 ifzman()
 indent(var(name)tt(=)var(value))
 
+cindex(namespace)
+The var(name) in an assignment may optionally include a em(namespace)
+prefix:
+ifzman()
+indent(tt(.)var(namespace)tt(.)var(parameter)tt(=)var(value))
+
+Namespaces have no special meaning to the shell except that parameters
+with a `tt(.)' prefix are not listed by the `tt(set)' builtin, nor
+shown by the `tt(typeset)' builtin unless explicitly named or the
+`tt(-m)' option is used.  They provide a convenient way to group
+related variables.  Note that, for support of possible future features,
+the first `tt(.)' is optional, but omitting it is discouraged.  Unlike
+ksh, a namespace need not be declared before it is referenced.
+
 In scalar assignment, var(value) is expanded as a single string, in
 which the elements of arrays are joined together; filename expansion is
 not performed unless the option tt(GLOB_ASSIGN) is set.
@@ -70,7 +84,8 @@ change its type to integer or float, and with tt(GLOB_ASSIGN) assigning a
 pattern to a variable may change its type to an array.
 
 To reference the value of a parameter, write `tt($)var(name)' or
-`tt(${)var(name)tt(})'.  See
+`tt(${)var(name)tt(})'.  The latter form is required when var(name)
+includes a namespace prefix.  See
 ifzman(em(Parameter Expansion) in zmanref(zshexpn))\
 ifnzman(noderef(Parameter Expansion))
 for complete details.  That section also explains the effect
@@ -80,10 +95,13 @@ startmenu()
 menu(Array Parameters)
 menu(Positional Parameters)
 menu(Local Parameters)
+menu(Named References)
 menu(Parameters Set By The Shell)
 menu(Parameters Used By The Shell)
 endmenu()
 texinode(Array Parameters)(Positional Parameters)()(Parameters)
+cindex(array parameters)
+cindex(parameters, array)
 sect(Array Parameters)
 To assign an array value, write one of:
 findex(set, use of)
@@ -566,6 +584,8 @@ entire second parameter concatenated with the filename generation pattern
 `tt([3,5])'.
 
 texinode(Positional Parameters)(Local Parameters)(Array Parameters)(Parameters)
+cindex(positional parameters)
+cindex(parameters, positional)
 sect(Positional Parameters)
 The positional parameters provide access to the command-line arguments
 of a shell function, shell script, or the shell itself; see
@@ -592,7 +612,9 @@ array assignment of the form `var(n)tt(=LPAR())var(value) ...tt(RPAR())' is
 allowed, and has the effect of shifting all the values at positions greater
 than var(n) by as many positions as necessary to accommodate the new values.
 
-texinode(Local Parameters)(Parameters Set By The Shell)(Positional Parameters)(Parameters)
+texinode(Local Parameters)(Named References)(Positional Parameters)(Parameters)
+cindex(local parameters)
+cindex(parameters, local)
 sect(Local Parameters)
 Shell function executions delimit scopes for shell parameters.
 (Parameters are dynamically scoped.)  The tt(typeset) builtin, and its
@@ -626,7 +648,53 @@ find the programs in tt(/new/directory) inside a function.
 Note that the restriction in older versions of zsh that local parameters
 were never exported has been removed.
 
-texinode(Parameters Set By The Shell)(Parameters Used By The Shell)(Local Parameters)(Parameters)
+texinode(Named References)(Parameters Set By The Shell)(Local Parameters)(Parameters)
+cindex(named references)
+cindex(references, named)
+sect(Named References)
+Zsh supports two different mechanisms for indirect parameter referencing:
+ifzman()
+example(tt(typeset )var(name)tt(=)var(rname)
+tt(print -r -- ${LPAR()P)tt(RPAR())var(name)tt(}))
+ifzman()
+example(tt(typeset -n )var(pname)tt(=)var(rname)
+tt(print -r -- ${)var(pname)tt(}))
+
+The `tt((P))' flag method is older and should be used when a script
+needs to be backwards-compatible.  This is described fully in
+the Parameter Expansion Flags section of
+ifzman(zmanref(zshexpn))ifnzman(noderef(Parameter Expansion)).  Zsh
+versions em(greater than) tt(5.9.0) are required for `tt(typeset -n)'.
+This manual was generated with Zsh tt(version()).
+
+When a em(named reference) is created with `tt(typeset -n)', all uses
+of var(pname) in assignments and expansions instead assign to or
+expand var(rname).  This also applies to `tt(unset )var(pname)' and to
+most subsequent uses of `tt(typeset)' with the exceptions of declaring
+a local in a called function, or updating a current-scope parameter with
+`tt(typeset -n)' or `tt(typeset +n)'. Thus to remove a named reference,
+use either `tt(unset -n )var(pname)' (preferred) or one of:
+ifzman()
+example(tt(typeset -n )var(pname=)
+tt(typeset +n )var(pname))
+
+followed by
+ifzman()
+indent(tt(unset )var(pname))
+
+An empty reference such as one of
+ifzman()
+example(tt(typeset -n )var(pname)
+tt(typeset -n )var(pname)tt(=)
+tt(typeset -n )var(pname)tt(=""))
+
+acts as a placeholder.  The first non-empty assignment to var(pname)
+initializes the reference, and subsequently any expansions of, or
+assignments to, var(pname) act on the referenced parameter.  This
+is explained in the Named References section of
+ifzman(zmanref(zshexpn))ifnzman(noderef(Parameter Expansion)).
+
+texinode(Parameters Set By The Shell)(Parameters Used By The Shell)(Named References)(Parameters)
 sect(Parameters Set By The Shell)
 In the parameter lists that follow, the mark `<S>' indicates that the
 parameter is special.  `<Z>' indicates that the parameter does not exist
@@ -681,9 +749,13 @@ vindex(argv)
 item(tt(argv) <S> <Z>)(
 Same as tt(*).  Assigning to tt(argv) changes the local positional
 parameters, but tt(argv) is em(not) itself a local parameter.
-Deleting tt(argv) with tt(unset) in any function deletes it everywhere,
-although only the innermost positional parameter array is deleted (so
-tt(*) and tt(@) in other scopes are not affected).
+Deleting tt(argv) with tt(unset) in any function deletes it everywhere.
+This can be avoided by declaring `tt(local +h argv)' before unsetting.
+Even when not so declared, only the innermost positional parameter
+array is deleted (so tt(*) and tt(@) in other scopes are not affected).
+
+A named reference to tt(argv) em(does not) permit a called function to
+access the positional parameters of its caller.
 )
 vindex(@)
 item(tt(@) <S>)(
@@ -712,7 +784,10 @@ last pipeline.
 )
 vindex(_)
 item(tt(_) <S>)(
-The last argument of the previous command.
+Initially, if tt(_) exists in the environment, then this parameter is set to
+its value. This value may be the full pathname of the current zsh
+executable or the script command file.
+Later, this parameter is set to the last argument of the previous command.
 Also, this parameter is set in the environment of every command
 executed to the full pathname of the command.
 )
@@ -851,7 +926,9 @@ referenced or seeded in the parent shell in between subshell invocations.
 )
 vindex(SECONDS)
 item(tt(SECONDS) <S>)(
-The number of seconds since shell invocation.  If this parameter
+The number of seconds since shell invocation.  On most platforms, this
+is a monotonic value, so it is not affected by NTP time jumps or other
+clock changes (though it may be affected by slewing).  If this parameter
 is assigned a value, then the value returned upon reference
 will be the value that was assigned plus the number of seconds
 since the assignment.
@@ -861,8 +938,10 @@ be changed using the tt(typeset) command.  The type may be changed only
 to one of the floating point types or back to integer.  For example,
 `tt(typeset -F SECONDS)'
 causes the value to be reported as a floating point number.  The
-value is available to microsecond accuracy, although the shell may
-show more or fewer digits depending on the use of tt(typeset).  See
+value is nominally available to nanosecond precision, although this
+varies by platform (and probably isn't accurate to 1 ns regardless),
+and the shell may show more or fewer digits depending on the
+use of tt(typeset).  See
 the documentation for the builtin tt(typeset) in
 ifzman(zmanref(zshbuiltins))\
 ifnzman(noderef(Shell Builtin Commands)) for more details.
@@ -879,7 +958,10 @@ has index 1, the signals are offset by 1 from the signal number
 used by the operating system.  For example, on typical Unix-like systems
 tt(HUP) is signal number 1, but is referred to as tt($signals[2]).  This
 is because of tt(EXIT) at position 1 in the array, which is used
-internally by zsh but is not known to the operating system.
+internally by zsh but is not known to the operating system. On many systems
+there is a block of reserved or unused signal numbers before the POSIX
+real-time signals so the array index can't be used as an accurate indicator
+of their signal number. Use, for example, tt(kill -l SIGRTMIN) instead.
 )
 vindex(TRY_BLOCK_ERROR)
 item(tt(TRY_BLOCK_ERROR) <S>)(
@@ -953,11 +1035,12 @@ Code specified by the tt(-c) option to the command line that invoked
 the shell.
 )
 item(tt(cmdsubst))(
-Command substitution using the tt(`)var(...)tt(`) or
-tt($+LPAR())var(...)tt(RPAR()) construct.
+Command substitution using of the tt(`)var(...)tt(`),
+tt($+LPAR())var(...)tt(RPAR()),tt(${{)var(name)tt(}) var(...)tt(}),
+tt(${|)var(...)tt(}), or tt(${ )var(...)tt( }) constructs.
 )
 item(tt(equalsubst))(
-File substitution using the tt(=+LPAR())var(...)tt(RPAR()) construct.
+The tt(=+LPAR())var(...)tt(RPAR()) form of process substitution.
 )
 item(tt(eval))(
 Code executed by the tt(eval) builtin.
@@ -985,13 +1068,13 @@ item(tt(globsort))(
 Code executed to order files by the tt(o) glob qualifier.
 )
 item(tt(insubst))(
-File substitution using the tt(<LPAR())var(...)tt(RPAR()) construct.
+The tt(<LPAR())var(...)tt(RPAR()) form of process substitution.
 )
 item(tt(loadautofunc))(
 Code read directly from a file to define an autoloaded function.
 )
 item(tt(outsubst))(
-File substitution using the tt(>LPAR())var(...)tt(RPAR()) construct.
+The tt(>LPAR())var(...)tt(RPAR()) form of process substitution.
 )
 item(tt(sched))(
 Code executed by the tt(sched) builtin.
@@ -1041,6 +1124,10 @@ vindex(ZSH_EXECUTION_STRING)
 item(tt(ZSH_EXECUTION_STRING))(
 If the shell was started with the option tt(-c), this contains
 the argument passed to the option.  Otherwise it is not set.
+)
+vindex(ZSH_EXEPATH)
+item(tt(ZSH_EXEPATH))(
+Full pathname of the executable file of the current zsh process.
 )
 vindex(ZSH_NAME)
 item(tt(ZSH_NAME))(
@@ -1251,15 +1338,18 @@ Internal field separators (by default space, tab, newline and NUL), that
 are used to separate words which result from
 command or parameter expansion and words read by
 the tt(read) builtin.  Any characters from the set space, tab and
-newline that appear in the IFS are called em(IFS white space).
+newline that appear in the tt(IFS) are called em(IFS white space).
 One or more IFS white space characters or one non-IFS white space
 character together with any adjacent IFS white space character delimit
 a field.  If an IFS white space character appears twice consecutively
-in the IFS, this character is treated as if it were not an IFS white
+in the tt(IFS), this character is treated as if it were not an IFS white
 space character.
 
 If the parameter is unset, the default is used.  Note this has
 a different effect from setting the parameter to an empty string.
+
+If tt(MULTIBYTE) option is on and tt(IFS) contains invalid characters in
+the current locale, it is reset to the default.
 )
 vindex(KEYBOARD_HACK)
 item(tt(KEYBOARD_HACK))(
@@ -1414,6 +1504,7 @@ An array (colon-separated list)
 of directories to search for commands.
 When this parameter is set, each directory is scanned
 and all files found are put in a hash table.
+Directories named by relative path are not scanned for hashing.
 )
 vindex(POSTEDIT)
 item(tt(POSTEDIT) <S>)(
@@ -1553,9 +1644,13 @@ All other prompt escapes are also allowed.
 
 The actions available at the prompt are tt([nyae]):
 startsitem()
-sitem(tt(n) +LPAR()`no'+RPAR() +LPAR()default+RPAR())(Discard the correction and run the command.)
-sitem(tt(y) +LPAR()`yes'+RPAR())(Make the correction and run the command.)
-sitem(tt(a) +LPAR()`abort'+RPAR())(Discard the entire command line without running it.)
+sitem(tt(n) +LPAR()`no'+RPAR() +LPAR()default+RPAR())(Discard the correction.
+If there are no more corrections, accept the command line, else (with
+tt(CORRECT_ALL)) prompt for the next.)
+sitem(tt(y) +LPAR()`yes'+RPAR())(Make the correction. If there are no more
+corrections, accept the command line.)
+sitem(tt(a) +LPAR()`abort'+RPAR())(Place the entire command line in the
+history for later edit, but without accepting it.)
 sitem(tt(e) +LPAR()`edit'+RPAR())(Resume editing the command line.)
 endsitem()
 )
@@ -1644,8 +1739,12 @@ A star may be inserted between the percent sign and flags printing time
 (e.g., `tt(%*E)'); this causes the time to be printed in
 `var(hh)tt(:)var(mm)tt(:)var(ss)tt(.)var(ttt)'
 format (hours and minutes are only printed if they are not zero).
-Alternatively, `tt(m)' or `tt(u)' may be used (e.g., `tt(%mE)') to produce
-time output in milliseconds or microseconds, respectively.
+Alternatively, `tt(m)', `tt(u)', or `tt(n)' may be used (e.g.,
+`tt(%mE)') to produce time output in milliseconds, microseconds, or
+nanoseconds, respectively. Note that some timings on some platforms
+are not actually nanosecond-precise (nor accurate to 1 ns when
+they are); in fact on many systems user and kernel times are not
+even microsecond-precise.
 )
 vindex(TMOUT)
 item(tt(TMOUT))(
@@ -1667,7 +1766,7 @@ well as any directory names.  The default is `tt(/tmp/zsh)'.
 vindex(TMPSUFFIX)
 item(tt(TMPSUFFIX))(
 A filename suffix which the shell will use for temporary files created
-by process substitutions (e.g., `tt(=LPAR()var(list)RPAR())').
+by process substitutions (e.g., `tt(=LPAR())var(list)tt(RPAR())').
 Note that the value should include a leading dot `tt(.)' if intended
 to be interpreted as a file extension.  The default is not to append
 any suffix, thus this parameter should be assigned only when needed

@@ -89,9 +89,9 @@ menu(Initialization)
 menu(Completion System Configuration)
 menu(Control Functions)
 menu(Bindable Commands)
-menu(Completion Functions)
-menu(Completion Directories)
+menu(Utility Functions)
 menu(Completion System Variables)
+menu(Completion Directories)
 endmenu()
 
 texinode(Initialization)(Completion System Configuration)()(Completion System)
@@ -2023,8 +2023,8 @@ position shown as a percentage of the total length otherwise.  In each
 case the form with the uppercase letter will be replaced by a string of fixed
 width, padded to the  right with spaces, while the lowercase form will
 be replaced by a variable width string.  As in other prompt strings, the
-escape sequences `tt(%S)', `tt(%s)', `tt(%B)', `tt(%b)', `tt(%U)',
-`tt(%u)' for entering and leaving the display modes
+escape sequence `tt(%H)` along with `tt(%S)', `tt(%s)', `tt(%B)', `tt(%b)',
+`tt(%U)', `tt(%u)' for entering and leaving the display modes
 standout, bold and underline, and `tt(%F)', `tt(%f)', `tt(%K)', `tt(%k)' for
 changing the foreground background colour, are also available, as is the form
 `tt(%{)...tt(%})' for enclosing escape sequences which display with zero
@@ -3363,7 +3363,7 @@ endsitem()
 )
 enditem()
 
-texinode(Bindable Commands)(Completion Functions)(Control Functions)(Completion System)
+texinode(Bindable Commands)(Utility Functions)(Control Functions)(Completion System)
 sect(Bindable Commands)
 cindex(completion system, bindable commands)
 
@@ -3562,7 +3562,7 @@ emacs and vi respectively.
 )
 enditem()
 
-texinode(Completion Functions)(Completion System Variables)(Bindable Commands)(Completion System)
+texinode(Utility Functions)(Completion System Variables)(Bindable Commands)(Completion System)
 sect(Utility Functions)
 cindex(completion system, utility functions)
 
@@ -4290,6 +4290,14 @@ arguments.  The first describes the first argument as a
 be completed.  The last description gives all other arguments the
 description `var(page number)' but does not offer completions.
 )
+findex(_as_if)
+item(tt(_as_if) var(command) [var(arg) ... ])(
+This function is useful when one command should be completed as if it were
+another command with particular arguments. For example to complete tt(foo) as
+if it were tt(bar --baz), use
+
+example(compdef '_as_if bar --baz' foo)
+)
 findex(_cache_invalid)
 item(tt(_cache_invalid) var(cache_identifier))(
 This function returns status zero if the completions cache corresponding to
@@ -4389,8 +4397,10 @@ the functions for the fields if they are called.
 findex(_command_names)
 item(tt(_command_names) [ tt(-e) | tt(-) ])(
 This function completes words that are valid at command position: names of
-aliases, builtins, hashed commands, functions, and so on.  With the tt(-e)
-flag, only hashed commands are completed.  The tt(-) flag is ignored.
+aliases, builtins, hashed commands, functions, and so on.  If the tt(-e)
+flag is given, or if the list of precommands contains a non-builtin command
+(e.g. because tt(_normal -p) has been used previously), only hashed commands
+are completed.  The tt(-) flag is ignored.
 )
 findex(_comp_locale)
 item(tt(_comp_locale))(
@@ -4776,7 +4786,11 @@ functions) regardless of prior precommands (e.g. `tt(zsh -c)').
 )
 item(tt(-p) var(precommand))(
 Append var(precommand) to the list of precommands. This option should be
-used in nearly all cases in which tt(-P) is not applicable.
+used in nearly all cases in which tt(-P) is not applicable. An advantage
+of using this option is that it can automatically signal to
+tt(_command_names) that subsequent completion should be limited to hashed
+commands, which is usually the desired behaviour following commands like
+tt(chroot) and tt(nohup).
 )
 enditem()
 
@@ -5227,6 +5241,57 @@ the group name.
 This function is called automatically from tt(_description)
 and hence is not normally called explicitly.
 )
+findex(_shadow)
+findex(_unshadow)
+xitem(tt(_shadow) [ tt(-s) var(suffix) ] [ -- ] var(command_name) ...)
+item(tt(_unshadow))(
+The tt(_shadow) function creates a copy of each of the shell functions
+in the var(command_name) arguments.  The original functions can then
+be replaced by new implementations.  A later call to tt(_unshadow)
+removes the new implementations, if any, and restores the originals.
+
+Recommended usage is to pair tt(_shadow) and tt(_unshadow) calls by
+use of an `tt(always)' block:
+example({
+  _shadow fname
+  function fname {
+    # Do your new thing
+  }
+  # Invoke callers of fname
+} always {
+  _unshadow
+})
+
+The var(suffix), if supplied, is prepended by an `tt(@)' character and
+then appended to each var(command_name) to create the copy.  Thus
+example(_shadow -s XX foo)
+creates a function named `tt(foo@XX)'.  This provides a well-known
+name for the original implementation if the new implementation needs
+to call it as a wrapper.  If a nested call to  tt(_shadow) uses the
+same var(suffix), em(no new copy is made).  The presumption thus is
+that suffixes and new implementations correspond one to one.
+
+If var(command_name) is a builtin or external command, and there has been
+no preceding tt(_shadow) replacement made, the function so created calls
+the shadowed name prefixed by the tt(builtin) or tt(command) keywords as
+appropriate.
+example({
+  _shadow -s wrap compadd
+  compadd LPAR()RPAR() {
+    # compadd@wrap runs builtin compadd
+    compadd@wrap -O tmparr "$@" }
+} always {
+  _unshadow
+})
+
+When no var(suffix) argument is present, tt(_shadow) creates a unique
+suffix to avoid name collisions.
+
+Arguments of tt(_unshadow) are ignored.  Every listed var(command_name)
+for the most recent call to tt(_shadow) is removed.  This differs from
+an early implementation that required tt(_unshadow) to receive the
+same var(suffix) and var(command_name) list as tt(_shadow).
+)
 findex(_store_cache)
 item(tt(_store_cache) var(cache_identifier) var(param) ...)(
 This function, together with tt(_retrieve_cache) and
@@ -5397,10 +5462,6 @@ example(local expl
 _wanted tag expl 'description' \ 
     compadd -- var(match1) var(match2)...)
 
-See also the use of tt(_wanted) in the example function in
-ifzman(the subsection `Dynamic named directories' in zmanref(zshexpn))\
-ifnzman(noderef(Dynamic named directories)).
-
 Note that, as for tt(_requested), the var(command) must be able to
 accept options to be passed down to tt(compadd).
 
@@ -5420,7 +5481,7 @@ ifnzman(noderef(The zsh/zleparameter Module)).
 )
 enditem()
 
-texinode(Completion System Variables)(Completion Directories)(Completion Functions)(Completion System)
+texinode(Completion System Variables)(Completion Directories)(Utility Functions)(Completion System)
 sect(Completion System Variables)
 cindex(completion system, variables)
 

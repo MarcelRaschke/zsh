@@ -877,23 +877,15 @@ dosetopt(int optno, int value, int force, char *new_opts)
 	}
 #endif /* HAVE_SETRESGID && HAVE_SETRESUID */
 
-#ifdef JOB_CONTROL
     } else if (!force && optno == MONITOR && value) {
 	if (new_opts[optno] == value)
 	    return 0;
-	if (SHTTY != -1) {
+	if (SHTTY == -1)
+	    return -1;
+	if (!origpgrp) {
 	    origpgrp = GETPGRP();
 	    acquire_pgrp();
-	} else
-	    return -1;
-#else
-    } else if(optno == MONITOR && value) {
-	    return -1;
-#endif /* not JOB_CONTROL */
-#ifdef GETPWNAM_FAKED
-    } else if(optno == CDABLEVARS && value) {
-	    return -1;
-#endif /* GETPWNAM_FAKED */
+	}
     } else if ((optno == EMACSMODE || optno == VIMODE) && value) {
 	if (sticky && sticky->emulation)
 	    return -1;
@@ -904,7 +896,11 @@ dosetopt(int optno, int value, int force, char *new_opts)
 	keyboardhackchar = (value ? '`' : '\0');
     }
     new_opts[optno] = value;
-    if (optno == BANGHIST || optno == SHINSTDIN)
+    if (
+#ifdef MULTIBYTE_SUPPORT
+	optno == MULTIBYTE ||
+#endif
+	optno == BANGHIST || optno == SHINSTDIN)
 	inittyptab();
     return 0;
 }

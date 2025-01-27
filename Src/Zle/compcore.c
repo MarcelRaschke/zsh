@@ -1230,14 +1230,14 @@ check_param(char *s, int set, int test)
 	else if (idigit(*e))
 	    while (idigit(*e))
 		e++;
-	else if ((ie = itype_end(e, IIDENT, 0)) != e) {
+	else if ((ie = itype_end(e, INAMESPC, 0)) != e) {
 	    do {
 		e = ie;
 		if (comppatmatch && *comppatmatch &&
 		    (*e == Star || *e == Quest))
 		    ie = e + 1;
 		else
-		    ie = itype_end(e, IIDENT, 0);
+		    ie = itype_end(e, INAMESPC, 0);
 	    } while (ie != e);
 	}
 
@@ -2249,8 +2249,9 @@ addmatches(Cadata dat, char **argv)
 	    llpl = strlen(lpre);
 	    llsl = strlen(lsuf);
 
-	    if (llpl + (int)strlen(compqiprefix) + (int)strlen(lipre) != origlpre
-	     || llsl + (int)strlen(compqisuffix) + (int)strlen(lisuf) != origlsuf)
+	    /* This used to reference compqiprefix and compqisuffix, why? */
+	    if (llpl + (int)strlen(qipre) + (int)strlen(lipre) != origlpre
+	     || llsl + (int)strlen(qisuf) + (int)strlen(lisuf) != origlsuf)
 		lenchanged = 1;
 
 	    /* Test if there is an existing -P prefix. */
@@ -2898,9 +2899,9 @@ add_match_data(int alt, char *str, char *orig, Cline line,
 		*t++ = '$';
 		*t++ = '\'';
 		*t++ = '\\';
-		*t++ = '0' + ((STOUC(curchar) >> 6) & 7);
-		*t++ = '0' + ((STOUC(curchar) >> 3) & 7);
-		*t++ = '0' + (STOUC(curchar) & 7);
+		*t++ = '0' + (((unsigned char) curchar >> 6) & 7);
+		*t++ = '0' + (((unsigned char) curchar >> 3) & 7);
+		*t++ = '0' + ((unsigned char) curchar & 7);
 		*t++ = '\'';
 	    } while (cnt == MB_INCOMPLETE && fs < fe);
 	    /* Scanning restarts from the spot after the char we skipped. */
@@ -3252,7 +3253,7 @@ makearray(LinkList l, int type, int flags, int *np, int *nlp, int *llp)
 	    /* Now sort the array (it contains matches). */
 	    matchorder = flags;
 	    qsort((void *) rp, n, sizeof(Cmatch),
-		  (int (*) _((const void *, const void *)))matchcmp);
+		  (int (*) (const void *, const void *))matchcmp);
 
 	    /* since the matches are sorted and the default is to remove
 	     * all duplicates, -1 (remove only consecutive dupes) is a no-op,
@@ -3294,7 +3295,7 @@ makearray(LinkList l, int type, int flags, int *np, int *nlp, int *llp)
 		sp = (Cmatch *) zhalloc((n + 1) * sizeof(Cmatch));
 		memcpy(sp, rp, (n + 1) * sizeof(Cmatch));
 		qsort((void *) sp, n, sizeof(Cmatch),
-		      (int (*) _((const void *, const void *)))matchcmp);
+		      (int (*) (const void *, const void *))matchcmp);
 		for (asp = sp + 1; *asp; asp++) {
 		    Cmatch *ap = asp - 1, *bp = asp;
 		    if (matcheq(*ap, *bp)) {

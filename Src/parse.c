@@ -120,7 +120,7 @@ struct heredocs *hdocs;
  *     - if not (type & Z_END), followed by next WC_LIST
  *
  *   WC_SUBLIST
- *     - data contains type (&&, ||, END) and flags (coprog, not)
+ *     - data contains type (&&, ||, END) and flags (coproc, not)
  *     - followed by code for sublist
  *     - if not (type == END), followed by next WC_SUBLIST
  *
@@ -433,9 +433,9 @@ ecstrcode(char *s)
 	t = has_token(s);
 	wordcode c = (t ? 3 : 2);
 	switch (l) {
-	case 4: c |= ((wordcode) STOUC(s[2])) << 19;
-	case 3: c |= ((wordcode) STOUC(s[1])) << 11;
-	case 2: c |= ((wordcode) STOUC(s[0])) <<  3; break;
+	case 4: c |= ((wordcode) (unsigned char) s[2]) << 19;
+	case 3: c |= ((wordcode) (unsigned char) s[1]) << 11;
+	case 2: c |= ((wordcode) (unsigned char) s[0]) <<  3; break;
 	case 1: c = (t ? 7 : 6); break;
 	}
 	return c;
@@ -490,7 +490,7 @@ init_parse_status(void)
     /*
      * These variables are currently declared by the parser, so we
      * initialise them here.  Possibly they are more naturally declared
-     * by the lexical anaylser; however, as they are used for signalling
+     * by the lexical analyser; however, as they are used for signalling
      * between the two it's a bit ambiguous.  We clear them when
      * using the lexical analyser for strings as well as here.
      */
@@ -601,7 +601,7 @@ clear_hdocs(void)
  *			| sublist [ SEPER | AMPER | AMPERBANG ]
  *
  * cmdsubst indicates our event is part of a command-style
- * substitution terminated by the token indicationg, usual closing
+ * substitution terminated by the token indicated, usually closing
  * parenthesis.  In other cases endtok is ENDINPUT.
  */
 
@@ -1935,6 +1935,8 @@ par_simple(int *cmplx, int nr)
 
 		if (*ptr == Outbrace && ptr > tokstr + 1)
 		{
+		    /* Should we allow namespace FDs, {.foo.bar}>&file ? *
+		     * If so, change IIDENT to INAMESPC here             */
 		    if (itype_end(tokstr+1, IIDENT, 0) >= ptr)
 		    {
 			char *toksave = tokstr;
@@ -2055,6 +2057,9 @@ par_simple(int *cmplx, int nr)
 	    if (isset(EXECOPT) && hasalias && !isset(ALIASFUNCDEF) && argc &&
 		hasalias != input_hasalias()) {
 		zwarn("defining function based on alias `%s'", hasalias);
+		herrflush();
+		if (noerrs != 2)
+		    errflag |= ERRFLAG_ERROR;
 		YYERROR(oecused);
 	    }
 
@@ -2248,6 +2253,9 @@ par_redir(int *rp, char *idstring)
 	struct heredocs **hd;
 	int htype = type;
 
+	if (strchr(tokstr, '\n'))
+	    YYERROR(ecused);
+
 	/*
 	 * Add two here for the string to remember the HERE
 	 * terminator in raw and munged form.
@@ -2384,7 +2392,7 @@ par_nl_wordlist(void)
  */
 
 /**/
-void (*condlex) _((void)) = zshlex;
+void (*condlex) (void) = zshlex;
 
 /*
  * cond	: cond_1 { SEPER } [ DBAR { SEPER } cond ]
@@ -2722,11 +2730,10 @@ yyerror(int noerr)
 	if (!t || !t[t0] || t[t0] == '\n')
 	    break;
     if (!(histdone & HISTFLAG_NOEXEC) && !(errflag & ERRFLAG_INT)) {
-	if (t0 == 20)
-	    zwarn("parse error near `%l...'", t, 20);
-	else if (t0)
-	    zwarn("parse error near `%l'", t, t0);
-	else
+	if (t0) {
+	    t = metafy(t, t0, META_STATIC);
+	    zwarn("parse error near `%s%s'", t, t0 == 20 ? "..." : "");
+	} else
 	    zwarn("parse error");
     }
     if (!noerr && noerrs != 2)
@@ -3211,12 +3218,14 @@ bin_zcompile(char *nam, char **args, Options ops, UNUSED(int func))
 
     if (!args[1] && !(OPT_ISSET(ops,'c') || OPT_ISSET(ops,'a'))) {
 	queue_signals();
-	ret = build_dump(nam, dyncat(*args, FD_EXT), args, OPT_ISSET(ops,'U'),
+	dump = unmetafy(dyncat(*args, FD_EXT), NULL);
+	ret = build_dump(nam, dump, args, OPT_ISSET(ops,'U'),
 			 map, flags);
 	unqueue_signals();
 	return ret;
     }
-    dump = (strsfx(FD_EXT, *args) ? *args : dyncat(*args, FD_EXT));
+    dump = (strsfx(FD_EXT, *args) ? dupstring(*args) : dyncat(*args, FD_EXT));
+    unmetafy(dump, NULL);
 
     queue_signals();
     ret = ((OPT_ISSET(ops,'c') || OPT_ISSET(ops,'a')) ?
@@ -3394,6 +3403,7 @@ build_dump(char *nam, char *dump, char **files, int ali, int map, int flags)
 
     for (hlen = FD_PRELEN, tlen = 0; *files; files++) {
 	struct stat st;
+	char *fnam;
 
 	if (check_cond(*files, "k")) {
 	    flags = (flags & ~(FDHF_KSHLOAD | FDHF_ZSHLOAD)) | FDHF_KSHLOAD;
@@ -3402,7 +3412,8 @@ build_dump(char *nam, char *dump, char **files, int ali, int map, int flags)
 	    flags = (flags & ~(FDHF_KSHLOAD | FDHF_ZSHLOAD)) | FDHF_ZSHLOAD;
 	    continue;
 	}
-	if ((fd = open(*files, O_RDONLY)) < 0 ||
+	fnam = unmeta(*files);
+	if ((fd = open(fnam, O_RDONLY)) < 0 ||
 	    fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) ||
 	    (flen = lseek(fd, 0, 2)) == -1) {
 	    if (fd >= 0)

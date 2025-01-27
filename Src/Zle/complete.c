@@ -518,7 +518,7 @@ parse_class(Cpattern p, char *iptr)
 	    ch = range_type((char *)iptr, nptr-iptr);
 	    iptr = nptr + 2;
 	    if (ch != PP_UNKWN)
-		*optr++ = STOUC(Meta) + ch;
+		*optr++ = (unsigned char) Meta + ch;
 	} else {
 	    /* characters stay metafied */
 	    char *ptr1 = iptr;
@@ -829,7 +829,9 @@ bin_compadd(char *name, char **argv, UNUSED(Options ops), UNUSED(int func))
 
  ca_args:
 
-    if (mstr && (match = parse_cmatcher(name, mstr)) == pcm_err) {
+    if (mstr && (dat.aflags & CAF_MATCH) &&
+	    (match = parse_cmatcher(name, mstr)) == pcm_err)
+    {
 	zsfree(mstr);
 	zfree(dat.dpar, dparsize);
 	return 1;
