@@ -1,3 +1,9 @@
+2026-09-09  Bart Schaefer  <schaefer@zsh.org>
+
+	* Jim <linux.tech.guy@gmail.com>: 55130: Functions/Misc/colors:
+	extend the inline documentation to cover more custom attributes
+	and explain some terminal quirks
+
 2026-09-01  Jun-ichi Takimoto  <takimoto-j@kba.biglobe.ne.jp>
 
 	* 55120: Test/Y07call_program.ztst: only check values of LC_ALL
